@@ -1899,7 +1899,7 @@ input_csi_dispatch_winops(struct input_ctx *ictx)
 			}
 			break;
 		case 18:
-			input_reply(ictx, "\033[8;%u;%ut", x, y);
+			input_reply(ictx, "\033[8;%u;%ut", y, x);
 			break;
 		default:
 			log_debug("%s: unknown '%c'", __func__, ictx->ch);
@@ -2242,7 +2242,6 @@ static int
 input_dcs_dispatch(struct input_ctx *ictx)
 {
 	struct window_pane	*wp = ictx->wp;
-	struct options		*oo = wp->options;
 	struct screen_write_ctx	*sctx = &ictx->ctx;
 	struct window		*w = wp->window;
 	u_char			*buf = ictx->input_buf;
@@ -2256,7 +2255,8 @@ input_dcs_dispatch(struct input_ctx *ictx)
 		return (0);
 	if (ictx->flags & INPUT_DISCARD)
 		return (0);
-	allow_passthrough = options_get_number(oo, "allow-passthrough");
+	allow_passthrough = options_get_number(wp->options,
+	    "allow-passthrough");
 	if (!allow_passthrough)
 		return (0);
 	log_debug("%s: \"%s\"", __func__, buf);
