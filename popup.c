@@ -252,6 +252,7 @@ popup_draw_cb(struct client *c, void *data, struct screen_redraw_ctx *rctx)
 		tty_draw_line(tty, &s, 0, i, pd->sx, px, py + i, &defaults,
 		    palette);
 	}
+	screen_free(&s);
 	if (pd->md != NULL) {
 		c->overlay_check = NULL;
 		c->overlay_data = NULL;
@@ -573,7 +574,7 @@ menu:
 		x = m->x - (pd->menu->width + 4) / 2;
 	else
 		x = 0;
-	pd->md = menu_prepare(pd->menu, 0, NULL, x, m->y, c, NULL,
+	pd->md = menu_prepare(pd->menu, 0, 0, NULL, x, m->y, c, NULL,
 	    popup_menu_done, pd);
 	c->flags |= CLIENT_REDRAWOVERLAY;
 
