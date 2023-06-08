@@ -2249,16 +2249,6 @@ input_dcs_dispatch(struct input_ctx *ictx)
 		return (0);
 	if (ictx->flags & INPUT_DISCARD)
 		return (0);
-	allow_passthrough = options_get_number(wp->options,
-	    "allow-passthrough");
-	if (!allow_passthrough)
-		return (0);
-	log_debug("%s: \"%s\"", __func__, buf);
-
-	if (len >= prefixlen && strncmp(buf, prefix, prefixlen) == 0) {
-		screen_write_rawstring(sctx, buf + prefixlen, len - prefixlen,
-		    allow_passthrough == 2);
-	}
 
 	if (buf[0] == 'q') {
 		si = sixel_parse(buf, len, w->xpixel, w->ypixel);
@@ -2268,6 +2258,15 @@ input_dcs_dispatch(struct input_ctx *ictx)
 		}
 	}
 
+	allow_passthrough = options_get_number(wp->options, "allow-passthrough");
+	if (!allow_passthrough)
+		return (0);
+	log_debug("%s: \"%s\"", __func__, buf);
+
+	if (len >= prefixlen && strncmp(buf, prefix, prefixlen) == 0) {
+		screen_write_rawstring(sctx, buf + prefixlen, len - prefixlen,
+		    allow_passthrough == 2);
+	}
 	return (0);
 }
 
