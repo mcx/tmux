@@ -64,7 +64,11 @@ struct screen_write_citem;
 struct screen_write_cline;
 struct screen_write_ctx;
 struct session;
+
+#ifdef ENABLE_SIXEL
 struct sixel_image;
+#endif
+
 struct tty_ctx;
 struct tty_code;
 struct tty_key;
@@ -833,10 +837,12 @@ struct style {
 	enum style_default_type	default_type;
 };
 
+#ifdef ENABLE_SIXEL
 /* Image. */
 struct image {
 	struct screen		*s;
 	struct sixel_image	*data;
+	char			*fallback;
 
 	u_int			 px;
 	u_int			 py;
@@ -847,6 +853,7 @@ struct image {
 	TAILQ_ENTRY (image)	 entry;
 };
 TAILQ_HEAD(images, image);
+#endif
 
 /* Cursor style. */
 enum screen_cursor_style {
@@ -888,7 +895,10 @@ struct screen {
 
 	bitstr_t			*tabs;
 	struct screen_sel		*sel;
+
+#ifdef ENABLE_SIXEL
 	struct images			 images;
+#endif
 
 	struct screen_write_cline	*write_list;
 
@@ -1390,6 +1400,7 @@ struct tty {
 
 	u_int		 sx;
 	u_int		 sy;
+        /* Cell size in pixels. */
 	u_int		 xpixel;
 	u_int		 ypixel;
 
@@ -1398,6 +1409,8 @@ struct tty {
 	enum screen_cursor_style cstyle;
 	int		 ccolour;
 
+        /* Properties of the area being drawn on. */
+        /* When true, the drawing area is bigger than the terminal. */
 	int		 oflag;
 	u_int		 oox;
 	u_int		 ooy;
@@ -2341,7 +2354,11 @@ void	tty_set_path(struct tty *, const char *);
 void	tty_update_mode(struct tty *, int, struct screen *);
 void	tty_draw_line(struct tty *, struct screen *, u_int, u_int, u_int,
 	    u_int, u_int, const struct grid_cell *, struct colour_palette *);
-void	tty_draw_images(struct tty *, struct window_pane *, struct screen *);
+
+#ifdef ENABLE_SIXEL
+void	tty_draw_images(struct client *, struct window_pane *, struct screen *);
+#endif
+
 void	tty_sync_start(struct tty *);
 void	tty_sync_end(struct tty *);
 int	tty_open(struct tty *, char **);
@@ -2372,7 +2389,11 @@ void	tty_cmd_scrolldown(struct tty *, const struct tty_ctx *);
 void	tty_cmd_reverseindex(struct tty *, const struct tty_ctx *);
 void	tty_cmd_setselection(struct tty *, const struct tty_ctx *);
 void	tty_cmd_rawstring(struct tty *, const struct tty_ctx *);
+
+#ifdef ENABLE_SIXEL
 void	tty_cmd_sixelimage(struct tty *, const struct tty_ctx *);
+#endif
+
 void	tty_cmd_syncstart(struct tty *, const struct tty_ctx *);
 void	tty_default_colours(struct grid_cell *, struct window_pane *);
 
@@ -2955,8 +2976,10 @@ void	 screen_write_setselection(struct screen_write_ctx *, const char *,
 	     u_char *, u_int);
 void	 screen_write_rawstring(struct screen_write_ctx *, u_char *, u_int,
 	     int);
+#ifdef ENABLE_SIXEL
 void	 screen_write_sixelimage(struct screen_write_ctx *,
 	     struct sixel_image *, u_int);
+#endif
 void	 screen_write_alternateon(struct screen_write_ctx *,
 	     struct grid_cell *, int);
 void	 screen_write_alternateoff(struct screen_write_ctx *,
@@ -3370,14 +3393,15 @@ struct window_pane *spawn_pane(struct spawn_context *, char **);
 /* regsub.c */
 char		*regsub(const char *, const char *, const char *, int);
 
+#ifdef ENABLE_SIXEL
 /* image.c */
 int		 image_free_all(struct screen *);
-void		 image_store(struct screen *, struct sixel_image *);
+struct image	*image_store(struct screen *, struct sixel_image *);
 int		 image_check_line(struct screen *, u_int, u_int);
 int		 image_check_area(struct screen *, u_int, u_int, u_int, u_int);
 int		 image_scroll_up(struct screen *, u_int);
 
-/* sixel.c */
+/* image-sixel.c */
 struct sixel_image *sixel_parse(const char *, size_t, u_int, u_int);
 void		 sixel_free(struct sixel_image *);
 void		 sixel_log(struct sixel_image *);
@@ -3387,6 +3411,7 @@ struct sixel_image *sixel_scale(struct sixel_image *, u_int, u_int, u_int,
 char		*sixel_print(struct sixel_image *, struct sixel_image *,
 		     size_t *);
 struct screen	*sixel_to_screen(struct sixel_image *);
+#endif
 
 /* server-acl.c */
 void			 server_acl_init(void);

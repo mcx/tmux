@@ -1260,13 +1260,6 @@ tty_keys_clipboard(struct tty *tty, const char *buf, size_t len, size_t *size)
 	return (0);
 }
 
-//XXX primary DA
-//	for (i = 1; i < n; i++) {
-//		log_debug("%s: DA feature: %d", c->name, p[i]);
-//		if (p[i] == 4)
-//			flags |= TERM_SIXEL;
-//	}
-
 /*
  * Handle primary device attributes input. Returns 0 for success, -1 for
  * failure, 1 for partial.

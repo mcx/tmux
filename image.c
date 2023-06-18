@@ -34,6 +34,8 @@ image_free(struct image *im)
 	all_images_count--;
 
 	TAILQ_REMOVE(&s->images, im, entry);
+	sixel_free(im->data);
+	free(im->fallback);
 	free(im);
 }
 
@@ -48,7 +50,7 @@ image_free_all(struct screen *s)
 	return (redraw);
 }
 
-void
+struct image*
 image_store(struct screen *s, struct sixel_image *si)
 {
 	struct image	*im;
@@ -61,11 +63,16 @@ image_store(struct screen *s, struct sixel_image *si)
 	im->py = s->cy;
 	sixel_size_in_cells(si, &im->sx, &im->sy);
 
+	/* XXX Fallback mode: This can be abstracted further. */
+	xasprintf(&im->fallback, "Sixel image (%ux%u)\n", im->sx, im->sy);
+
 	TAILQ_INSERT_TAIL(&s->images, im, entry);
 
 	TAILQ_INSERT_TAIL(&all_images, im, all_entry);
 	if (++all_images_count == 10/*XXX*/)
 		image_free(TAILQ_FIRST(&all_images));
+
+	return (im);
 }
 
 int

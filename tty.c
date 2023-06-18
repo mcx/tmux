@@ -72,6 +72,11 @@ static int	tty_check_overlay(struct tty *, u_int, u_int);
 static void	tty_check_overlay_range(struct tty *, u_int, u_int, u_int,
 		    struct overlay_ranges *);
 
+#ifdef ENABLE_SIXEL
+static void	tty_write_one(void (*)(struct tty *, const struct tty_ctx *),
+		    struct client *, struct tty_ctx *);
+#endif
+
 #define tty_use_margin(tty) \
 	(tty->term->flags & TERM_DECSLRM)
 #define tty_full_width(tty, ctx) \
@@ -482,6 +487,11 @@ tty_update_features(struct tty *tty)
 		tty_puts(tty, tty_term_string(tty->term, TTYC_ENFCS));
 	if (tty->term->flags & TERM_VT100LIKE)
 		tty_puts(tty, "\033[?7727h");
+
+	/* tty features might have changed since the first draw during attach.
+	 * For example, this happens when DA responses are received.
+	 */
+	c->flags |= CLIENT_REDRAWWINDOW;
 
 	tty_invalidate(tty);
 }
@@ -1576,37 +1586,57 @@ tty_draw_line(struct tty *tty, struct screen *s, u_int px, u_int py, u_int nx,
 	tty_update_mode(tty, tty->mode, s);
 }
 
-void
-tty_draw_images(struct tty *tty, struct window_pane *wp, struct screen *s)
+#ifdef ENABLE_SIXEL
+/* Update context for client. */
+static int
+tty_set_client_cb(struct tty_ctx *ttyctx, struct client *c)
 {
-#if 0 /* XXX */
-	struct client	*c = tty->client;
+	struct window_pane	*wp = ttyctx->arg;
+
+	if (c->session->curw->window != wp->window)
+		return (0);
+	if (wp->layout_cell == NULL)
+		return (0);
+
+	/* Set the properties relevant to the current client. */
+	ttyctx->bigger = tty_window_offset(&c->tty, &ttyctx->wox, &ttyctx->woy,
+	    &ttyctx->wsx, &ttyctx->wsy);
+
+	ttyctx->yoff = ttyctx->ryoff = wp->yoff;
+	if (status_at_line(c) == 0)
+		ttyctx->yoff += status_line_size(c);
+
+	return (1);
+}
+
+void
+tty_draw_images(struct client *c, struct window_pane *wp, struct screen *s)
+{
 	struct image	*im;
 	struct tty_ctx	 ttyctx;
 
 	TAILQ_FOREACH(im, &s->images, entry) {
 		memset(&ttyctx, 0, sizeof ttyctx);
 
+		/* Set the client independent properties. */
 		ttyctx.ocx = im->px;
 		ttyctx.ocy = im->py;
 
 		ttyctx.orlower = s->rlower;
 		ttyctx.orupper = s->rupper;
 
-		ttyctx.bigger = tty_window_offset(&c->tty, &ttyctx.ox,
-		    &ttyctx.oy, &ttyctx.sx, &ttyctx.sy);
+		ttyctx.xoff = ttyctx.rxoff = wp->xoff;
+		ttyctx.sx = wp->sx;
+		ttyctx.sy = wp->sy;
 
-		ttyctx.xoff = wp->xoff;
-		ttyctx.yoff = wp->yoff;
-
-		if (status_at_line(c) == 0)
-			ttyctx.yoff += status_line_size(c);
-
-		ttyctx.ptr = im->data;
-		tty_cmd_sixelimage(tty, &ttyctx);
+		ttyctx.ptr = im;
+		ttyctx.arg = wp;
+		ttyctx.set_client_cb = tty_set_client_cb;
+		ttyctx.allow_invisible_panes = 1;
+		tty_write_one(tty_cmd_sixelimage, c, &ttyctx);
 	}
-#endif
 }
+#endif
 
 void
 tty_sync_start(struct tty *tty)
@@ -1680,6 +1710,19 @@ tty_write(void (*cmdfn)(struct tty *, const struct tty_ctx *),
 		}
 	}
 }
+
+#ifdef ENABLE_SIXEL
+/* Only write to the incoming tty instead of every client. */
+static void
+tty_write_one(void (*cmdfn)(struct tty *, const struct tty_ctx *),
+    struct client *c, struct tty_ctx *ctx)
+{
+	if (ctx->set_client_cb == NULL)
+		return;
+	if ((ctx->set_client_cb(ctx, c)) == 1)
+		cmdfn(&c->tty, ctx);
+}
+#endif
 
 void
 tty_cmd_insertcharacter(struct tty *tty, const struct tty_ctx *ctx)
@@ -2182,21 +2225,24 @@ tty_cmd_rawstring(struct tty *tty, const struct tty_ctx *ctx)
 	tty_invalidate(tty);
 }
 
+#ifdef ENABLE_SIXEL
 void
 tty_cmd_sixelimage(struct tty *tty, const struct tty_ctx *ctx)
 {
-	struct sixel_image	*si = ctx->ptr;
+	struct image		*im = ctx->ptr;
+	struct sixel_image	*si = im->data;
 	struct sixel_image	*new;
 	char			*data;
 	size_t			 size;
 	u_int			 cx = ctx->ocx, cy = ctx->ocy, sx, sy;
 	u_int			 i, j, x, y, rx, ry;
+	int			 fallback = 0;
 
 	if ((~tty->term->flags & TERM_SIXEL) &&
-        !tty_term_has(tty->term, TTYC_SXL))
-		return;
+            !tty_term_has(tty->term, TTYC_SXL))
+		fallback = 1;
 	if (tty->xpixel == 0 || tty->ypixel == 0)
-		return;
+		fallback = 1;
 
 	sixel_size_in_cells(si, &sx, &sy);
 	log_debug("%s: image is %ux%u", __func__, sx, sy);
@@ -2204,11 +2250,16 @@ tty_cmd_sixelimage(struct tty *tty, const struct tty_ctx *ctx)
 		return;
 	log_debug("%s: clamping to %u,%u-%u,%u", __func__, i, j, rx, ry);
 
-	new = sixel_scale(si, tty->xpixel, tty->ypixel, i, j, rx, ry, 0);
-	if (new == NULL)
-		return;
+	if (fallback == 1) {
+		data = xstrdup(im->fallback);
+		size = strlen(data);
+	} else {
+		new = sixel_scale(si, tty->xpixel, tty->ypixel, i, j, rx, ry, 0);
+		if (new == NULL)
+			return;
 
-	data = sixel_print(new, si, &size);
+		data = sixel_print(new, si, &size);
+	}
 	if (data != NULL) {
 		log_debug("%s: %zu bytes: %s", __func__, size, data);
 		tty_region_off(tty);
@@ -2220,8 +2271,11 @@ tty_cmd_sixelimage(struct tty *tty, const struct tty_ctx *ctx)
 		tty_invalidate(tty);
 		free(data);
 	}
-	sixel_free(new);
+
+	if (fallback == 0)
+		sixel_free(new);
 }
+#endif
 
 void
 tty_cmd_syncstart(struct tty *tty, const struct tty_ctx *ctx)
