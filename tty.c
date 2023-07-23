@@ -488,10 +488,11 @@ tty_update_features(struct tty *tty)
 	if (tty->term->flags & TERM_VT100LIKE)
 		tty_puts(tty, "\033[?7727h");
 
-	/* tty features might have changed since the first draw during attach.
-	 * For example, this happens when DA responses are received.
+	/*
+	 * Features might have changed since the first draw during attach. For
+	 * example, this happens when DA responses are received.
 	 */
-	c->flags |= CLIENT_REDRAWWINDOW;
+	server_redraw_client(c);
 
 	tty_invalidate(tty);
 }
@@ -2935,9 +2936,11 @@ tty_check_us(__unused struct tty *tty, struct colour_palette *palette,
 			gc->us = c;
 	}
 
-	/* Underscore colour is set as RGB so convert a 256 colour to RGB. */
-	if (gc->us & COLOUR_FLAG_256)
-		gc->us = colour_256toRGB (gc->us);
+	/* Underscore colour is set as RGB so convert. */
+	if ((c = colour_force_rgb (gc->us)) == -1)
+		gc->us = 8;
+	else
+		gc->us = c;
 }
 
 static void
@@ -3012,7 +3015,7 @@ tty_colours_us(struct tty *tty, const struct grid_cell *gc)
 	u_char			 r, g, b;
 
 	/* Clear underline colour. */
-	if (gc->us == 0) {
+	if (COLOUR_DEFAULT(gc->us)) {
 		tty_putcode(tty, TTYC_OL);
 		goto save;
 	}

@@ -144,6 +144,7 @@ static void	input_osc_104(struct input_ctx *, const char *);
 static void	input_osc_110(struct input_ctx *, const char *);
 static void	input_osc_111(struct input_ctx *, const char *);
 static void	input_osc_112(struct input_ctx *, const char *);
+static void	input_osc_133(struct input_ctx *, const char *);
 
 /* Transition entry/exit handlers. */
 static void	input_clear(struct input_ctx *);
@@ -2069,7 +2070,7 @@ static void
 input_csi_dispatch_sgr(struct input_ctx *ictx)
 {
 	struct grid_cell	*gc = &ictx->cell.cell;
-	u_int			 i;
+	u_int			 i, link;
 	int			 n;
 
 	if (ictx->param_list_len == 0) {
@@ -2101,7 +2102,9 @@ input_csi_dispatch_sgr(struct input_ctx *ictx)
 
 		switch (n) {
 		case 0:
+			link = gc->link;
 			memcpy(gc, &grid_default_cell, sizeof *gc);
+			gc->link = link;
 			break;
 		case 1:
 			gc->attr |= GRID_ATTR_BRIGHT;
@@ -2187,7 +2190,7 @@ input_csi_dispatch_sgr(struct input_ctx *ictx)
 			gc->attr &= ~GRID_ATTR_OVERLINE;
 			break;
 		case 59:
-			gc->us = 0;
+			gc->us = 8;
 			break;
 		case 90:
 		case 91:
@@ -2362,6 +2365,9 @@ input_exit_osc(struct input_ctx *ictx)
 		break;
 	case 112:
 		input_osc_112(ictx, p);
+		break;
+	case 133:
+		input_osc_133(ictx, p);
 		break;
 	default:
 		log_debug("%s: unknown '%u'", __func__, option);
@@ -2752,6 +2758,24 @@ input_osc_112(struct input_ctx *ictx, const char *p)
 		screen_set_cursor_colour(ictx->ctx.s, -1);
 }
 
+/* Handle the OSC 133 sequence. */
+static void
+input_osc_133(struct input_ctx *ictx, const char *p)
+{
+	struct grid		*gd = ictx->ctx.s->grid;
+	u_int			 line = ictx->ctx.s->cy + gd->hsize;
+	struct grid_line	*gl;
+
+	if (line > gd->hsize + gd->sy - 1)
+		return;
+	gl = grid_get_line(gd, line);
+
+	switch (*p) {
+	case 'A':
+		gl->flags |= GRID_LINE_START_PROMPT;
+		break;
+	}
+}
 
 /* Handle the OSC 52 sequence for setting the clipboard. */
 static void
@@ -2858,9 +2882,11 @@ input_reply_clipboard(struct bufferevent *bev, const char *buf, size_t len,
     const char *end)
 {
 	char	*out = NULL;
-	size_t	 outlen = 0;
+	int	 outlen = 0;
 
 	if (buf != NULL && len != 0) {
+		if (len >= ((size_t)INT_MAX * 3 / 4) - 1)
+			return;
 		outlen = 4 * ((len + 2) / 3) + 1;
 		out = xmalloc(outlen);
 		if ((outlen = b64_ntop(buf, len, out, outlen)) == -1) {

@@ -71,7 +71,7 @@ static u_int utf8_next_index;
 
 /* Get a UTF-8 item from data. */
 static struct utf8_item *
-utf8_item_by_data(const char *data, size_t size)
+utf8_item_by_data(const u_char *data, size_t size)
 {
 	struct utf8_item	ui;
 
@@ -94,7 +94,7 @@ utf8_item_by_index(u_int index)
 
 /* Add a UTF-8 item. */
 static int
-utf8_put_item(const char *data, size_t size, u_int *index)
+utf8_put_item(const u_char *data, size_t size, u_int *index)
 {
 	struct utf8_item	*ui;
 
