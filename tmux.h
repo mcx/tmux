@@ -2146,6 +2146,7 @@ struct key_binding {
 	key_code		 key;
 	struct cmd_list		*cmdlist;
 	const char		*note;
+	const char		*tablename;
 
 	int			 flags;
 #define KEY_BINDING_REPEAT 0x1
@@ -2284,6 +2285,7 @@ enum sort_order {
 	SORT_ACTIVITY,
 	SORT_CREATION,
  	SORT_INDEX,
+	SORT_MODIFIER,
 	SORT_NAME,
 	SORT_ORDER,
 	SORT_SIZE,
@@ -2382,6 +2384,10 @@ struct window_pane	**sort_get_panes_window(struct window *, u_int *,
 struct winlink		**sort_get_winlinks(u_int *, struct sort_criteria *);
 struct winlink		**sort_get_winlinks_session(struct session *, u_int *,
 			      struct sort_criteria *);
+struct key_binding	**sort_get_key_bindings(u_int *,
+			      struct sort_criteria *);
+struct key_binding	**sort_get_key_bindings_table(struct key_table *,
+			      u_int *, struct sort_criteria *);
 
 /* format.c */
 #define FORMAT_STATUS 0x1
@@ -2894,6 +2900,7 @@ void	 key_bindings_reset(const char *, key_code);
 void	 key_bindings_remove_table(const char *);
 void	 key_bindings_reset_table(const char *);
 void	 key_bindings_init(void);
+int	 key_bindings_has_repeat(struct key_binding **, u_int);
 struct cmdq_item *key_bindings_dispatch(struct key_binding *,
 	     struct cmdq_item *, struct client *, struct key_event *,
 	     struct cmd_find_state *);
@@ -3615,9 +3622,9 @@ void		 utf8_copy(struct utf8_data *, const struct utf8_data *);
 enum utf8_state	 utf8_open(struct utf8_data *, u_char);
 enum utf8_state	 utf8_append(struct utf8_data *, u_char);
 int		 utf8_isvalid(const char *);
-int		 utf8_strvis(char *, const char *, size_t, int);
-int		 utf8_stravis(char **, const char *, int);
-int		 utf8_stravisx(char **, const char *, size_t, int);
+size_t		 utf8_strvis(char *, const char *, size_t, int);
+size_t		 utf8_stravis(char **, const char *, int);
+size_t		 utf8_stravisx(char **, const char *, size_t, int);
 char		*utf8_sanitize(const char *);
 size_t		 utf8_strlen(const struct utf8_data *);
 u_int		 utf8_strwidth(const struct utf8_data *, ssize_t);
